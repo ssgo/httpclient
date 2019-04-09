@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/ssgo/utility"
+	"github.com/ssgo/u"
 	"golang.org/x/net/http2"
 )
 
@@ -102,7 +102,7 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 		headers = append(headers, cp.XUniqueId, uniqueId)
 	}
 	headers = append(headers, cp.XRealIpName, cp.getRealIp(request))
-	headers = append(headers, cp.XForwardedForName, request.Header.Get(cp.XForwardedForName)+utility.StringIf(request.Header.Get(cp.XForwardedForName) == "", "", ", ")+request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
+	headers = append(headers, cp.XForwardedForName, request.Header.Get(cp.XForwardedForName)+u.StringIf(request.Header.Get(cp.XForwardedForName) == "", "", ", ")+request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
 	headers = append(headers, settedHeaders...)
 	return cp.Do(method, url, data, headers...)
 }
@@ -161,7 +161,7 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 }
 
 func (cp *ClientPool) getRealIp(request *http.Request) string {
-	return utility.StringIf(request.Header.Get(cp.XRealIpName) != "", request.Header.Get(cp.XRealIpName), request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
+	return u.StringIf(request.Header.Get(cp.XRealIpName) != "", request.Header.Get(cp.XRealIpName), request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
 }
 
 func (rs *Result) String() string {
