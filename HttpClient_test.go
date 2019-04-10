@@ -1,16 +1,15 @@
 package httpclient
 
 import (
+	"github.com/ssgo/log"
+	"github.com/ssgo/standard"
 	"golang.org/x/net/http2"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
-
-func Hello() string {
-	return "Hello"
-}
 
 func TestHttp(tt *testing.T) {
 	c := GetClient(time.Second)
@@ -50,6 +49,7 @@ func start(l net.Listener, startChan chan bool) {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello"))
+		log.LogRequest("testApp", server.Addr, r.RemoteAddr, r.Header.Get(standard.DiscoverHeaderFromApp), r.Header.Get(standard.DiscoverHeaderFromNode), r.Header.Get(standard.DiscoverHeaderClientId), r.Header.Get(standard.DiscoverHeaderSessionId), r.Header.Get(standard.DiscoverHeaderRequestId), r.Header.Get(standard.DiscoverHeaderHost), 0, 0, r.Method, r.RequestURI, getHeaders(r.Header), nil, 0.00032, 200, getHeaders(w.Header()), 5, "Hello", nil)
 	})
 
 	startChan <- true
@@ -59,6 +59,17 @@ func start(l net.Listener, startChan chan bool) {
 			continue
 		}
 		go s2.ServeConn(rwc, &http2.ServeConnOpts{BaseConfig: &server})
-
 	}
+}
+
+func getHeaders(headers http.Header) map[string]string {
+	out := map[string]string{}
+	for k, v := range headers {
+		if len(v) > 1 {
+			out[k] = strings.Join(v, "; ")
+		} else {
+			out[k] = v[0]
+		}
+	}
+	return out
 }

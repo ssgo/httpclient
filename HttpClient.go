@@ -13,16 +13,14 @@ import (
 	"time"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/ssgo/standard"
 	"github.com/ssgo/u"
 	"golang.org/x/net/http2"
 )
 
 type ClientPool struct {
-	pool              *http.Client
-	GlobalHeaders     map[string]string
-	XUniqueId         string
-	XRealIpName       string
-	XForwardedForName string
+	pool          *http.Client
+	GlobalHeaders map[string]string
 }
 
 type Result struct {
@@ -87,22 +85,39 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 	for k, v := range request.Header {
 		headers = append(headers, k, v[0])
 	}
-	if cp.XForwardedForName == "" {
-		cp.XForwardedForName = "X-Forwarded-For"
-	}
-	if cp.XUniqueId == "" {
-		cp.XUniqueId = "X-Unique-Id"
-	}
-	if cp.XRealIpName == "" {
-		cp.XRealIpName = "X-Real-Ip"
+
+	// 真实的用户IP，通过 X-Real-IP 续传
+	headers = append(headers, standard.DiscoverHeaderClientIp, cp.getRealIp(request))
+
+	// 客户端IP列表，通过 X-Forwarded-For 接力续传
+	headers = append(headers, standard.DiscoverHeaderForwardedFor, request.Header.Get(standard.DiscoverHeaderForwardedFor)+u.StringIf(request.Header.Get(standard.DiscoverHeaderForwardedFor) == "", "", ", ")+request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
+
+	// 客户唯一编号，通过 X-Client-ID 续传
+	if request.Header.Get(standard.DiscoverHeaderClientId) != "" {
+		headers = append(headers, standard.DiscoverHeaderClientId, request.Header.Get(standard.DiscoverHeaderClientId))
 	}
 
-	uniqueId := request.Header.Get(cp.XUniqueId)
-	if request.Header.Get(cp.XUniqueId) != "" {
-		headers = append(headers, cp.XUniqueId, uniqueId)
+	// 会话唯一编号，通过 X-Session-ID 续传
+	if request.Header.Get(standard.DiscoverHeaderSessionId) != "" {
+		headers = append(headers, standard.DiscoverHeaderSessionId, request.Header.Get(standard.DiscoverHeaderSessionId))
 	}
-	headers = append(headers, cp.XRealIpName, cp.getRealIp(request))
-	headers = append(headers, cp.XForwardedForName, request.Header.Get(cp.XForwardedForName)+u.StringIf(request.Header.Get(cp.XForwardedForName) == "", "", ", ")+request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
+
+	// 请求唯一编号，通过 X-Request-ID 续传
+	requestId := request.Header.Get(standard.DiscoverHeaderRequestId)
+	if requestId == "" {
+		requestId = u.UniqueId()
+		request.Header.Set(standard.DiscoverHeaderRequestId, requestId)
+	}
+	headers = append(headers, standard.DiscoverHeaderRequestId, requestId)
+
+	// 真实用户请求的Host，通过 X-Host 续传
+	host := request.Header.Get(standard.DiscoverHeaderHost)
+	if host == "" {
+		host = request.Host
+		request.Header.Set(standard.DiscoverHeaderHost, host)
+	}
+	headers = append(headers, standard.DiscoverHeaderHost, host)
+
 	headers = append(headers, settedHeaders...)
 	return cp.Do(method, url, data, headers...)
 }
@@ -161,7 +176,7 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 }
 
 func (cp *ClientPool) getRealIp(request *http.Request) string {
-	return u.StringIf(request.Header.Get(cp.XRealIpName) != "", request.Header.Get(cp.XRealIpName), request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
+	return u.StringIf(request.Header.Get(standard.DiscoverHeaderClientIp) != "", request.Header.Get(standard.DiscoverHeaderClientIp), request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
 }
 
 func (rs *Result) String() string {
