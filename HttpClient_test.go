@@ -49,7 +49,7 @@ func start(l net.Listener, startChan chan bool) {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello"))
-		log.LogRequest("testApp", server.Addr, r.RemoteAddr, r.Header.Get(standard.DiscoverHeaderFromApp), r.Header.Get(standard.DiscoverHeaderFromNode), r.Header.Get(standard.DiscoverHeaderClientId), r.Header.Get(standard.DiscoverHeaderSessionId), r.Header.Get(standard.DiscoverHeaderRequestId), r.Header.Get(standard.DiscoverHeaderHost), 0, 0, r.Method, r.RequestURI, getHeaders(r.Header), nil, 0.00032, 200, getHeaders(w.Header()), 5, "Hello", nil)
+		log.LogRequest("testApp", server.Addr, r.RemoteAddr, r.Header.Get(standard.DiscoverHeaderFromApp), r.Header.Get(standard.DiscoverHeaderFromNode), r.Header.Get(standard.DiscoverHeaderClientId), r.Header.Get(standard.DiscoverHeaderSessionId), r.Header.Get(standard.DiscoverHeaderRequestId), r.Header.Get(standard.DiscoverHeaderHost), r.Header.Get(standard.DiscoverHeaderScheme), r.Proto, 0, 0, r.Method, r.RequestURI, getHeaders(r.Header), nil, 0.00032, 200, getHeaders(w.Header()), 5, "Hello", nil)
 	})
 
 	startChan <- true
