@@ -118,6 +118,14 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 	}
 	headers = append(headers, standard.DiscoverHeaderHost, host)
 
+	// 真实用户请求的Scheme，通过 X-Scheme 续传
+	scheme := request.Header.Get(standard.DiscoverHeaderScheme)
+	if scheme == "" {
+		scheme = u.StringIf(request.TLS == nil, "http", "https")
+		request.Header.Set(standard.DiscoverHeaderScheme, scheme)
+	}
+	headers = append(headers, standard.DiscoverHeaderScheme, scheme)
+
 	headers = append(headers, settedHeaders...)
 	return cp.Do(method, url, data, headers...)
 }
