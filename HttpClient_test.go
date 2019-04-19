@@ -11,14 +11,25 @@ import (
 	"time"
 )
 
-func TestHttp(tt *testing.T) {
+func T1estHttp(tt *testing.T) {
 	c := GetClient(time.Second)
 	r := c.Get("http://61.135.169.121")
-	if r.Error != nil {
+	if r.Error != nil || strings.Index(r.String(), "baidu.com") == -1 {
 		tt.Error("baidu error	", r.Error)
 	}
 }
-func TestH2C(tt *testing.T) {
+
+func TestStream(tt *testing.T) {
+	c := GetClient(time.Second)
+	c.NoBody = true
+	r := c.Get("http://61.135.169.121")
+
+	if r.Error != nil || strings.Index(r.String(), "baidu.com") != -1 {
+		tt.Error("baidu error	", r.Error)
+	}
+}
+
+func T1estH2C(tt *testing.T) {
 	listener, _ := net.Listen("tcp", ":20080")
 	startChan := make(chan bool, 1)
 	go start(listener, startChan)

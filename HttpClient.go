@@ -21,6 +21,7 @@ import (
 type ClientPool struct {
 	pool          *http.Client
 	GlobalHeaders map[string]string
+	NoBody        bool
 }
 
 type Result struct {
@@ -174,13 +175,21 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 	if err != nil {
 		return &Result{Error: err}
 	}
-	result, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return &Result{Error: err}
-	}
-	res.Body.Close()
 
-	return &Result{data: result, Response: res}
+	if res.ContentLength == -1 {
+		res.ContentLength = u.Int64(res.Header.Get("Content-Length"))
+	}
+
+	if cp.NoBody {
+		return &Result{data: nil, Response: res}
+	} else {
+		result, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return &Result{Error: err}
+		}
+		res.Body.Close()
+		return &Result{data: result, Response: res}
+	}
 }
 
 func (cp *ClientPool) getRealIp(request *http.Request) string {
