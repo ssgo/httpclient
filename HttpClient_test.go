@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func T1estHttp(tt *testing.T) {
+func TestHttp(tt *testing.T) {
 	c := GetClient(time.Second)
 	r := c.Get("http://61.135.169.121")
 	if r.Error != nil || strings.Index(r.String(), "baidu.com") == -1 {
@@ -29,7 +29,7 @@ func TestStream(tt *testing.T) {
 	}
 }
 
-func T1estH2C(tt *testing.T) {
+func TestH2C(tt *testing.T) {
 	listener, _ := net.Listen("tcp", ":20080")
 	startChan := make(chan bool, 1)
 	go start(listener, startChan)
