@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
@@ -136,20 +137,30 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 	if data == nil {
 		req, err = http.NewRequest(method, url, nil)
 	} else {
-		var bytesData []byte
+		//var bytesData []byte
 		err = nil
 		isJson := false
+		var reader io.Reader
 		switch t := data.(type) {
+		case *io.ReadCloser:
+			reader = *t
+		case io.ReadCloser:
+			reader = t
 		case []byte:
-			bytesData = t
+			reader = bytes.NewReader(t)
 		case string:
-			bytesData = []byte(t)
+			reader = bytes.NewReader([]byte(t))
 		default:
-			bytesData, err = json.Marshal(data)
-			isJson = true
+			bytesData, err := json.Marshal(data)
+			if err == nil {
+				reader = bytes.NewReader(bytesData)
+				isJson = true
+			}else{
+				reader = bytes.NewReader([]byte(u.String(data)))
+			}
 		}
 		if err == nil {
-			req, err = http.NewRequest(method, url, bytes.NewReader(bytesData))
+			req, err = http.NewRequest(method, url, reader)
 			if isJson {
 				req.Header.Set("Content-Type", "application/json")
 			}
