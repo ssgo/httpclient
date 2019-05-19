@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mitchellh/mapstructure"
 	"github.com/ssgo/standard"
 	"github.com/ssgo/u"
 	"golang.org/x/net/http2"
@@ -288,7 +287,7 @@ func convertBytesToObject(data []byte, result interface{}) error {
 		tr := new(map[string]interface{})
 		err = json.Unmarshal(data, tr)
 		if err == nil {
-			err = mapstructure.WeakDecode(tr, result)
+			u.Convert(tr, result)
 		}
 	}
 	return err
