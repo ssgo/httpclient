@@ -43,7 +43,7 @@ func TestH2C(tt *testing.T) {
 		tt.Error("h2c result err	", r.String())
 	}
 
-	listener.Close()
+	_ = listener.Close()
 }
 
 func start(l net.Listener, startChan chan bool) {
@@ -54,10 +54,10 @@ func start(l net.Listener, startChan chan bool) {
 	s2 := &http2.Server{
 		IdleTimeout: 1 * time.Minute,
 	}
-	http2.ConfigureServer(&server, s2)
+	_ = http2.ConfigureServer(&server, s2)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Hello"))
+		_, _ = w.Write([]byte("Hello"))
 	})
 
 	startChan <- true

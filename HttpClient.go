@@ -197,7 +197,7 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 		if err != nil {
 			return &Result{Error: err}
 		}
-		res.Body.Close()
+		_ = res.Body.Close()
 		return &Result{data: result, Response: res}
 	}
 }
@@ -219,13 +219,13 @@ func (rs *Result) Bytes() []byte {
 
 func (rs *Result) Map() map[string]interface{} {
 	tr := make(map[string]interface{})
-	rs.To(&tr)
+	_ = rs.To(&tr)
 	return tr
 }
 
 func (rs *Result) Arr() []interface{} {
 	tr := make([]interface{}, 0)
-	rs.To(&tr)
+	_ = rs.To(&tr)
 	return tr
 }
 
@@ -261,7 +261,7 @@ func (rs *Result) ToAction(result interface{}) string {
 		return ""
 	}
 
-	convertBytesToObject(rs.data[resultStart:resultEnd-resultStart], result)
+	_ = convertBytesToObject(rs.data[resultStart:resultEnd-resultStart], result)
 	return string(rs.data[actionStart : actionEnd-actionStart])
 }
 
