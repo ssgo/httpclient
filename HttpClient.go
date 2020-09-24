@@ -87,45 +87,52 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 		headers = append(headers, k, v[0])
 	}
 
-	// 真实的用户IP，通过 X-Real-IP 续传
-	headers = append(headers, standard.DiscoverHeaderClientIp, cp.getRealIp(request))
-
-	// 客户端IP列表，通过 X-Forwarded-For 接力续传
-	headers = append(headers, standard.DiscoverHeaderForwardedFor, request.Header.Get(standard.DiscoverHeaderForwardedFor)+u.StringIf(request.Header.Get(standard.DiscoverHeaderForwardedFor) == "", "", ", ")+request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
-
-	// 客户唯一编号，通过 X-Client-ID 续传
-	if request.Header.Get(standard.DiscoverHeaderClientId) != "" {
-		headers = append(headers, standard.DiscoverHeaderClientId, request.Header.Get(standard.DiscoverHeaderClientId))
+	// 续传 X-...
+	for _, h := range standard.DiscoverRelayHeaders {
+		if request.Header.Get(h) != "" {
+			headers = append(headers, h, request.Header.Get(h))
+		}
 	}
 
-	// 会话唯一编号，通过 X-Session-ID 续传
-	if request.Header.Get(standard.DiscoverHeaderSessionId) != "" {
-		headers = append(headers, standard.DiscoverHeaderSessionId, request.Header.Get(standard.DiscoverHeaderSessionId))
-	}
-
-	// 请求唯一编号，通过 X-Request-ID 续传
-	requestId := request.Header.Get(standard.DiscoverHeaderRequestId)
-	if requestId == "" {
-		requestId = u.UniqueId()
-		request.Header.Set(standard.DiscoverHeaderRequestId, requestId)
-	}
-	headers = append(headers, standard.DiscoverHeaderRequestId, requestId)
-
-	// 真实用户请求的Host，通过 X-Host 续传
-	host := request.Header.Get(standard.DiscoverHeaderHost)
-	if host == "" {
-		host = request.Host
-		request.Header.Set(standard.DiscoverHeaderHost, host)
-	}
-	headers = append(headers, standard.DiscoverHeaderHost, host)
-
-	// 真实用户请求的Scheme，通过 X-Scheme 续传
-	scheme := request.Header.Get(standard.DiscoverHeaderScheme)
-	if scheme == "" {
-		scheme = u.StringIf(request.TLS == nil, "http", "https")
-		request.Header.Set(standard.DiscoverHeaderScheme, scheme)
-	}
-	headers = append(headers, standard.DiscoverHeaderScheme, scheme)
+	//// 真实的用户IP，通过 X-Real-IP 续传
+	//headers = append(headers, standard.DiscoverHeaderClientIp, cp.getRealIp(request))
+	//
+	//// 客户端IP列表，通过 X-Forwarded-For 接力续传
+	//headers = append(headers, standard.DiscoverHeaderForwardedFor, request.Header.Get(standard.DiscoverHeaderForwardedFor)+u.StringIf(request.Header.Get(standard.DiscoverHeaderForwardedFor) == "", "", ", ")+request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
+	//
+	//// 客户唯一编号，通过 X-Client-ID 续传
+	//if request.Header.Get(standard.DiscoverHeaderClientId) != "" {
+	//	headers = append(headers, standard.DiscoverHeaderClientId, request.Header.Get(standard.DiscoverHeaderClientId))
+	//}
+	//
+	//// 会话唯一编号，通过 X-Session-ID 续传
+	//if request.Header.Get(standard.DiscoverHeaderSessionId) != "" {
+	//	headers = append(headers, standard.DiscoverHeaderSessionId, request.Header.Get(standard.DiscoverHeaderSessionId))
+	//}
+	//
+	//// 请求唯一编号，通过 X-Request-ID 续传
+	//requestId := request.Header.Get(standard.DiscoverHeaderRequestId)
+	//if requestId == "" {
+	//	requestId = u.UniqueId()
+	//	request.Header.Set(standard.DiscoverHeaderRequestId, requestId)
+	//}
+	//headers = append(headers, standard.DiscoverHeaderRequestId, requestId)
+	//
+	//// 真实用户请求的Host，通过 X-Host 续传
+	//host := request.Header.Get(standard.DiscoverHeaderHost)
+	//if host == "" {
+	//	host = request.Host
+	//	request.Header.Set(standard.DiscoverHeaderHost, host)
+	//}
+	//headers = append(headers, standard.DiscoverHeaderHost, host)
+	//
+	//// 真实用户请求的Scheme，通过 X-Scheme 续传
+	//scheme := request.Header.Get(standard.DiscoverHeaderScheme)
+	//if scheme == "" {
+	//	scheme = u.StringIf(request.TLS == nil, "http", "https")
+	//	request.Header.Set(standard.DiscoverHeaderScheme, scheme)
+	//}
+	//headers = append(headers, standard.DiscoverHeaderScheme, scheme)
 
 	headers = append(headers, settedHeaders...)
 	return cp.Do(method, url, data, headers...)
@@ -154,7 +161,7 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 			if err == nil {
 				reader = bytes.NewReader(bytesData)
 				isJson = true
-			}else{
+			} else {
 				reader = bytes.NewReader([]byte(u.String(data)))
 			}
 		}
