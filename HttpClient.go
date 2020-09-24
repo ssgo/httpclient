@@ -179,7 +179,7 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 	for i := 1; i < len(headers); i += 2 {
 		if headers[i-1] == "Host" {
 			req.Host = headers[i]
-		} else {
+		} else if req.Header.Get(headers[i-1]) == "" {
 			req.Header.Set(headers[i-1], headers[i])
 		}
 	}
