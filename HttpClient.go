@@ -52,7 +52,12 @@ func GetClient(timeout time.Duration) *ClientPool {
 	if timeout < time.Millisecond {
 		timeout *= time.Millisecond
 	}
-	return &ClientPool{pool: &http.Client{Timeout: timeout}, GlobalHeaders: map[string]string{}}
+	return &ClientPool{pool: &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}, GlobalHeaders: map[string]string{}}
 }
 
 func (cp *ClientPool) EnableRedirect() {
@@ -187,6 +192,7 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 	for k, v := range cp.GlobalHeaders {
 		req.Header.Set(k, v)
 	}
+
 
 	res, err := cp.pool.Do(req)
 	if err != nil {
