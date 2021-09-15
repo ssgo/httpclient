@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	url2 "net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -29,6 +30,8 @@ type Result struct {
 	Response *http.Response
 	data     []byte
 }
+
+type Form = map[string]string
 
 func GetClientH2C(timeout time.Duration) *ClientPool {
 	if timeout < time.Millisecond {
@@ -145,12 +148,12 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string) *Result {
 	var req *http.Request
 	var err error
+	contentType := ""
 	if data == nil {
 		req, err = http.NewRequest(method, url, nil)
 	} else {
 		//var bytesData []byte
 		err = nil
-		isJson := false
 		var reader io.Reader
 		switch t := data.(type) {
 		case *io.ReadCloser:
@@ -161,19 +164,39 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 			reader = bytes.NewReader(t)
 		case string:
 			reader = bytes.NewReader([]byte(t))
+		case url2.Values:
+			reader = bytes.NewReader([]byte(t.Encode()))
+			contentType = "application/x-www-form-urlencoded"
+		case map[string][]string:
+			formData := url2.Values{}
+			for k, values := range t {
+				for _, v := range values {
+					formData.Add(k, v)
+				}
+			}
+			reader = bytes.NewReader([]byte(formData.Encode()))
+			contentType = "application/x-www-form-urlencoded"
+		case map[string]string:
+			formData := url2.Values{}
+			for k, v := range t {
+				formData.Set(k, v)
+			}
+			reader = bytes.NewReader([]byte(formData.Encode()))
+			contentType = "application/x-www-form-urlencoded"
 		default:
-			bytesData, err := json.Marshal(data)
+			var bytesData []byte
+			bytesData, err = json.Marshal(data)
 			if err == nil {
 				reader = bytes.NewReader(bytesData)
-				isJson = true
+				contentType = "application/json"
 			} else {
 				reader = bytes.NewReader([]byte(u.String(data)))
 			}
 		}
 		if err == nil {
 			req, err = http.NewRequest(method, url, reader)
-			if isJson {
-				req.Header.Set("Content-Type", "application/json")
+			if contentType != "" {
+				req.Header.Set("Content-Type", contentType)
 			}
 		}
 	}
@@ -192,7 +215,6 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 	for k, v := range cp.GlobalHeaders {
 		req.Header.Set(k, v)
 	}
-
 
 	res, err := cp.pool.Do(req)
 	if err != nil {
