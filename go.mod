@@ -3,7 +3,7 @@ module github.com/ssgo/httpclient
 go 1.12
 
 require (
-	github.com/ssgo/standard v0.5.32
-	github.com/ssgo/u v0.5.32
+	github.com/ssgo/standard v0.5.33
+	github.com/ssgo/u v0.5.33
 	golang.org/x/net v0.0.0-20190320064053-1272bf9dcd53
 )
