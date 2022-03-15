@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ssgo/log"
 	"github.com/ssgo/standard"
 	"github.com/ssgo/u"
 	"golang.org/x/net/http2"
@@ -23,6 +24,7 @@ type ClientPool struct {
 	pool          *http.Client
 	GlobalHeaders map[string]string
 	NoBody        bool
+	Debug         bool
 }
 
 type Result struct {
@@ -149,6 +151,7 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 	var req *http.Request
 	var err error
 	contentType := ""
+	contentLength := 0
 	if data == nil {
 		req, err = http.NewRequest(method, url, nil)
 	} else {
@@ -174,21 +177,27 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 					formData.Add(k, v)
 				}
 			}
-			reader = bytes.NewReader([]byte(formData.Encode()))
+			bytesData := []byte(formData.Encode())
+			reader = bytes.NewReader(bytesData)
 			contentType = "application/x-www-form-urlencoded"
+			contentLength = len(bytesData)
 		case map[string]string:
 			formData := url2.Values{}
 			for k, v := range t {
 				formData.Set(k, v)
 			}
-			reader = bytes.NewReader([]byte(formData.Encode()))
+			bytesData := []byte(formData.Encode())
+			reader = bytes.NewReader(bytesData)
 			contentType = "application/x-www-form-urlencoded"
+			contentLength = len(bytesData)
 		default:
 			var bytesData []byte
+			//bytesData, err = json.MarshalIndent(data, "", "  ")
 			bytesData, err = json.Marshal(data)
 			if err == nil {
 				reader = bytes.NewReader(bytesData)
 				contentType = "application/json"
+				contentLength = len(bytesData)
 			} else {
 				reader = bytes.NewReader([]byte(u.String(data)))
 			}
@@ -197,6 +206,9 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 			req, err = http.NewRequest(method, url, reader)
 			if contentType != "" {
 				req.Header.Set("Content-Type", contentType)
+			}
+			if contentLength > 0 {
+				req.Header.Set("Content-Length", u.String(contentLength))
 			}
 		}
 	}
@@ -216,7 +228,13 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 		req.Header.Set(k, v)
 	}
 
+	if cp.Debug {
+		log.DefaultLogger.Info("http request", "method", req.Method, "host", req.Host, "path", req.URL.Path, "headers", req.Header, "data", data)
+	}
 	res, err := cp.pool.Do(req)
+	if cp.Debug {
+		log.DefaultLogger.Info("http response", "headers", res.Header, "err", err)
+	}
 	if err != nil {
 		return &Result{Error: err}
 	}
@@ -233,6 +251,9 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 			return &Result{Error: err}
 		}
 		_ = res.Body.Close()
+		if cp.Debug {
+			log.DefaultLogger.Info("http response data", "url", req.RequestURI, "data", result)
+		}
 		return &Result{data: result, Response: res}
 	}
 }
