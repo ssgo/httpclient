@@ -158,6 +158,8 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 		//var bytesData []byte
 		err = nil
 		var reader io.Reader
+		//fmt.Println("  000", reflect.TypeOf(data))
+
 		switch t := data.(type) {
 		case *io.ReadCloser:
 			reader = *t
@@ -191,16 +193,13 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 			contentType = "application/x-www-form-urlencoded"
 			contentLength = len(bytesData)
 		default:
-			var bytesData []byte
 			//bytesData, err = json.MarshalIndent(data, "", "  ")
-			bytesData, err = json.Marshal(data)
-			if err == nil {
-				reader = bytes.NewReader(bytesData)
-				contentType = "application/json"
-				contentLength = len(bytesData)
-			} else {
-				reader = bytes.NewReader([]byte(u.String(data)))
-			}
+			//fmt.Println("  111", data)
+			bytesData := u.JsonBytes(data)
+			//fmt.Println("  222", string(bytesData))
+			reader = bytes.NewReader(bytesData)
+			contentType = "application/json"
+			contentLength = len(bytesData)
 		}
 		if err == nil {
 			req, err = http.NewRequest(method, url, reader)
@@ -215,7 +214,6 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 	if err != nil {
 		return &Result{Error: err}
 	}
-
 	for i := 1; i < len(headers); i += 2 {
 		if headers[i-1] == "Host" {
 			req.Host = headers[i]
@@ -223,11 +221,9 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 			req.Header.Set(headers[i-1], headers[i])
 		}
 	}
-
 	for k, v := range cp.GlobalHeaders {
 		req.Header.Set(k, v)
 	}
-
 	if cp.Debug {
 		log.DefaultLogger.Info("http request", "method", req.Method, "host", req.Host, "path", req.URL.Path, "headers", req.Header, "data", data)
 	}
@@ -238,7 +234,6 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 	if err != nil {
 		return &Result{Error: err}
 	}
-
 	if res.ContentLength == -1 {
 		res.ContentLength = u.Int64(res.Header.Get("Content-Length"))
 	}
