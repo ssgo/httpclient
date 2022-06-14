@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	url2 "net/url"
 	"reflect"
 	"strings"
@@ -39,6 +40,7 @@ func GetClientH2C(timeout time.Duration) *ClientPool {
 	if timeout < time.Millisecond {
 		timeout *= time.Millisecond
 	}
+	jar, _ := cookiejar.New(nil)
 	clientConfig := &http.Client{
 		Transport: &http2.Transport{
 			AllowHTTP: true,
@@ -50,6 +52,7 @@ func GetClientH2C(timeout time.Duration) *ClientPool {
 			return http.ErrUseLastResponse
 		},
 		Timeout: timeout,
+		Jar: jar,
 	}
 	return &ClientPool{pool: clientConfig, GlobalHeaders: map[string]string{}}
 }
@@ -57,11 +60,13 @@ func GetClient(timeout time.Duration) *ClientPool {
 	if timeout < time.Millisecond {
 		timeout *= time.Millisecond
 	}
+	jar, _ := cookiejar.New(nil)
 	return &ClientPool{pool: &http.Client{
 		Timeout: timeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
+		Jar: jar,
 	}, GlobalHeaders: map[string]string{}}
 }
 
