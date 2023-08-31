@@ -52,7 +52,7 @@ func GetClientH2C(timeout time.Duration) *ClientPool {
 			return http.ErrUseLastResponse
 		},
 		Timeout: timeout,
-		Jar: jar,
+		Jar:     jar,
 	}
 	return &ClientPool{pool: clientConfig, GlobalHeaders: map[string]string{}}
 }
@@ -97,17 +97,26 @@ func (cp *ClientPool) Head(url string, data interface{}, headers ...string) *Res
 	return cp.Do("HEAD", url, data, headers...)
 }
 func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, data interface{}, settedHeaders ...string) *Result {
-	headers := make([]string, 0)
-	for k, v := range request.Header {
-		headers = append(headers, k, v[0])
-	}
+	headers := map[string]string{}
+	// 注释掉不续传未在standard.DiscoverRelayHeaders中定义的头
+	//for k, v := range request.Header {
+	//	headers[k] = v[0]
+	//}
 
 	// 续传 X-...
 	for _, h := range standard.DiscoverRelayHeaders {
 		if request.Header.Get(h) != "" {
-			headers = append(headers, h, request.Header.Get(h))
+			headers[h] = request.Header.Get(h)
 		}
 	}
+
+	// 续传 X-Forward-For
+	xForwardFor := request.Header.Get(standard.DiscoverHeaderForwardedFor)
+	if xForwardFor != "" {
+		xForwardFor = ", "+xForwardFor
+	}
+	xForwardFor = request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')]+xForwardFor
+	headers[standard.DiscoverHeaderForwardedFor] = xForwardFor
 
 	//// 真实的用户IP，通过 X-Real-IP 续传
 	//headers = append(headers, standard.DiscoverHeaderClientIp, cp.getRealIp(request))
@@ -149,8 +158,15 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 	//}
 	//headers = append(headers, standard.DiscoverHeaderScheme, scheme)
 
-	headers = append(headers, settedHeaders...)
-	return cp.Do(method, url, data, headers...)
+	for i := 1; i < len(settedHeaders); i += 2 {
+		headers[settedHeaders[i-1]] = settedHeaders[i]
+	}
+
+	headerArgs := make([]string, 0)
+	for k, v := range headers {
+		headerArgs = append(headerArgs, k, v)
+	}
+	return cp.Do(method, url, data, headerArgs...)
 }
 func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string) *Result {
 	var req *http.Request
