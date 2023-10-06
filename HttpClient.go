@@ -93,8 +93,8 @@ func (cp *ClientPool) Put(url string, data interface{}, headers ...string) *Resu
 func (cp *ClientPool) Delete(url string, data interface{}, headers ...string) *Result {
 	return cp.Do("DELETE", url, data, headers...)
 }
-func (cp *ClientPool) Head(url string, data interface{}, headers ...string) *Result {
-	return cp.Do("HEAD", url, data, headers...)
+func (cp *ClientPool) Head(url string, headers ...string) *Result {
+	return cp.Do("HEAD", url, nil, headers...)
 }
 func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, data interface{}, settedHeaders ...string) *Result {
 	headers := map[string]string{}
