@@ -168,7 +168,16 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 	}
 	return cp.Do(method, url, data, headerArgs...)
 }
+
 func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string) *Result {
+	return cp.do(true, method, url, data, headers...)
+}
+
+func (cp *ClientPool) ManualDo(method, url string, data interface{}, headers ...string) *Result {
+	return cp.do(false, method, url, data, headers...)
+}
+
+func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, headers ...string) *Result {
 	var req *http.Request
 	var err error
 	contentType := ""
@@ -259,7 +268,7 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 		res.ContentLength = u.Int64(res.Header.Get("Content-Length"))
 	}
 
-	if cp.NoBody {
+	if !fetchBody || cp.NoBody {
 		return &Result{data: nil, Response: res}
 	} else {
 		result, err := ioutil.ReadAll(res.Body)
