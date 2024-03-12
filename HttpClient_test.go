@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"golang.org/x/net/http2"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -19,11 +20,16 @@ func TestHttp(tt *testing.T) {
 
 func TestStream(tt *testing.T) {
 	c := GetClient(time.Second)
-	c.NoBody = true
-	r := c.Get("http://61.135.169.121")
+	r := c.ManualDo("GET", "http://61.135.169.121", nil)
 
 	if r.Error != nil || strings.Index(r.String(), "baidu.com") != -1 {
-		tt.Error("baidu error	", r.Error)
+		tt.Error("stream get error	", r.Error)
+	}
+
+	defer r.Response.Body.Close()
+	buf, err := io.ReadAll(r.Response.Body)
+	if err != nil || !strings.Contains(string(buf), "baidu.com") {
+		tt.Error("stream read error	", r.Error)
 	}
 }
 

@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	url2 "net/url"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -113,9 +114,9 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 	// 续传 X-Forward-For
 	xForwardFor := request.Header.Get(standard.DiscoverHeaderForwardedFor)
 	if xForwardFor != "" {
-		xForwardFor = ", "+xForwardFor
+		xForwardFor = ", " + xForwardFor
 	}
-	xForwardFor = request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')]+xForwardFor
+	xForwardFor = request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')] + xForwardFor
 	headers[standard.DiscoverHeaderForwardedFor] = xForwardFor
 
 	//// 真实的用户IP，通过 X-Real-IP 续传
@@ -175,6 +176,94 @@ func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string
 
 func (cp *ClientPool) ManualDo(method, url string, data interface{}, headers ...string) *Result {
 	return cp.do(false, method, url, data, headers...)
+}
+
+type Range struct {
+	Start int64
+	End   int64
+}
+
+func downloadPart(cp *ClientPool, fp *os.File, task *Range, url string, headers ...string) (int64, error) {
+	headers[len(headers)-1] = fmt.Sprintf("bytes=%d-%d", task.Start, task.End)
+	r := cp.ManualDo("GET", url, nil, headers...)
+	if r.Error != nil {
+		return 0, r.Error
+	} else {
+		n, err := io.Copy(fp, r.Response.Body)
+		return n, err
+	}
+}
+
+func (cp *ClientPool) Download(filename, url string, callback func(start, end int64, ok bool, finished, total int64), headers ...string) error {
+	r1 := cp.Head(url, headers...)
+	total := r1.Response.ContentLength
+	tasks := make([]Range, 0)
+	if total > 0 {
+		n := int64(0)
+		for i := int64(0); i < total; i += 4194304 {
+			tasks = append(tasks, Range{i, i + 4194304 - 1})
+			n = i + 4194304
+		}
+		if n < total {
+			tasks = append(tasks, Range{n, total})
+		}
+
+		fp, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+		if err == nil {
+			defer fp.Close()
+			finished := int64(0)
+			headers = append(headers, "Range", "")
+			retryTask := make([]Range, 0)
+			for _, task := range tasks {
+				n, err := downloadPart(cp, fp, &task, url, headers...)
+				finished += n
+				if callback != nil {
+					callback(task.Start, task.End, err == nil, finished, total)
+				}
+				if err != nil {
+					retryTask = append(retryTask, task)
+				}
+			}
+			retry2Task := make([]Range, 0)
+			for _, task := range retryTask {
+				n, err := downloadPart(cp, fp, &task, url, headers...)
+				finished += n
+				if callback != nil {
+					callback(task.Start, task.End, err == nil, finished, total)
+				}
+				if err != nil {
+					retry2Task = append(retry2Task, task)
+				}
+			}
+			for _, task := range retry2Task {
+				n, err := downloadPart(cp, fp, &task, url, headers...)
+				finished += n
+				if callback != nil {
+					callback(task.Start, task.End, err == nil, finished, total)
+				}
+			}
+			if finished < total {
+				return errors.New("download file failed")
+			}
+		} else {
+			return err
+		}
+	} else {
+		r := cp.ManualDo("GET", url, nil, headers...)
+		if r.Error != nil {
+			return r.Error
+		}
+		defer r.Response.Body.Close()
+		fp, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+		if err == nil {
+			defer fp.Close()
+			_, err := io.Copy(fp, r.Response.Body)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, headers ...string) *Result {
@@ -271,11 +360,11 @@ func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, h
 	if !fetchBody || cp.NoBody {
 		return &Result{data: nil, Response: res}
 	} else {
-		result, err := ioutil.ReadAll(res.Body)
+		defer res.Body.Close()
+		result, err := io.ReadAll(res.Body)
 		if err != nil {
 			return &Result{Error: err}
 		}
-		_ = res.Body.Close()
 		if cp.Debug {
 			log.DefaultLogger.Info("http response data", "url", req.RequestURI, "data", result)
 		}
@@ -285,6 +374,21 @@ func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, h
 
 func (cp *ClientPool) getRealIp(request *http.Request) string {
 	return u.StringIf(request.Header.Get(standard.DiscoverHeaderClientIp) != "", request.Header.Get(standard.DiscoverHeaderClientIp), request.RemoteAddr[0:strings.IndexByte(request.RemoteAddr, ':')])
+}
+
+func (rs *Result) Save(filename string) error {
+	if dstFile, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600); err == nil {
+		defer dstFile.Close()
+		if rs.data == nil {
+			defer rs.Response.Body.Close()
+			io.Copy(dstFile, rs.Response.Body)
+		} else {
+			dstFile.Write(rs.data)
+		}
+		return nil
+	} else {
+		return err
+	}
 }
 
 func (rs *Result) String() string {
