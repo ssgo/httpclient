@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	url2 "net/url"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -23,10 +25,11 @@ import (
 )
 
 type ClientPool struct {
-	pool          *http.Client
-	GlobalHeaders map[string]string
-	NoBody        bool
-	Debug         bool
+	pool             *http.Client
+	GlobalHeaders    map[string]string
+	NoBody           bool
+	Debug            bool
+	DownloadPartSize int64
 }
 
 type Result struct {
@@ -55,7 +58,7 @@ func GetClientH2C(timeout time.Duration) *ClientPool {
 		Timeout: timeout,
 		Jar:     jar,
 	}
-	return &ClientPool{pool: clientConfig, GlobalHeaders: map[string]string{}}
+	return &ClientPool{pool: clientConfig, GlobalHeaders: map[string]string{}, DownloadPartSize: 4194304}
 }
 func GetClient(timeout time.Duration) *ClientPool {
 	if timeout < time.Millisecond {
@@ -68,7 +71,7 @@ func GetClient(timeout time.Duration) *ClientPool {
 			return http.ErrUseLastResponse
 		},
 		Jar: jar,
-	}, GlobalHeaders: map[string]string{}}
+	}, GlobalHeaders: map[string]string{}, DownloadPartSize: 4194304}
 }
 
 func (cp *ClientPool) EnableRedirect() {
@@ -194,20 +197,21 @@ func downloadPart(cp *ClientPool, fp *os.File, task *Range, url string, headers 
 	}
 }
 
-func (cp *ClientPool) Download(filename, url string, callback func(start, end int64, ok bool, finished, total int64), headers ...string) error {
+func (cp *ClientPool) Download(filename, url string, callback func(start, end int64, ok bool, finished, total int64), headers ...string) (*Result, error) {
 	r1 := cp.Head(url, headers...)
 	total := r1.Response.ContentLength
 	tasks := make([]Range, 0)
 	if total > 0 {
 		n := int64(0)
-		for i := int64(0); i < total; i += 4194304 {
-			tasks = append(tasks, Range{i, i + 4194304 - 1})
-			n = i + 4194304
+		for i := int64(0); i < total; i += cp.DownloadPartSize {
+			tasks = append(tasks, Range{i, i + cp.DownloadPartSize - 1})
+			n = i + cp.DownloadPartSize
 		}
 		if n < total {
 			tasks = append(tasks, Range{n, total})
 		}
 
+		u.CheckPath(filename)
 		fp, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 		if err == nil {
 			defer fp.Close()
@@ -243,15 +247,16 @@ func (cp *ClientPool) Download(filename, url string, callback func(start, end in
 				}
 			}
 			if finished < total {
-				return errors.New("download file failed")
+				return nil, errors.New("download file failed")
 			}
 		} else {
-			return err
+			return nil, err
 		}
+		return r1, nil
 	} else {
 		r := cp.ManualDo("GET", url, nil, headers...)
 		if r.Error != nil {
-			return r.Error
+			return r, r.Error
 		}
 		defer r.Response.Body.Close()
 		fp, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
@@ -259,11 +264,53 @@ func (cp *ClientPool) Download(filename, url string, callback func(start, end in
 			defer fp.Close()
 			_, err := io.Copy(fp, r.Response.Body)
 			if err != nil {
-				return err
+				return r, err
 			}
 		}
+		return r, nil
 	}
-	return nil
+}
+
+func (cp *ClientPool) MPost(url string, formData map[string]string, files map[string]string, headers ...string) (*Result, []error) {
+	errors := make([]error, 0)
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	for k, v := range formData {
+		if err := writer.WriteField(k, v); err != nil {
+			errors = append(errors, err)
+		}
+	}
+
+	for k, v := range files {
+		if fp, err := os.Open(v); err == nil {
+			if part, err := writer.CreateFormFile(k, filepath.Base(v)); err == nil {
+				if _, err = io.Copy(part, fp); err != nil {
+					errors = append(errors, err)
+				}
+			} else {
+				errors = append(errors, err)
+			}
+			_ = fp.Close()
+		} else {
+			errors = append(errors, err)
+		}
+	}
+
+	err := writer.Close()
+	if err != nil {
+		errors = append(errors, err)
+	}
+
+	if len(errors) == 0 {
+		headers = append(headers, "Content-Type", writer.FormDataContentType())
+		r := cp.Post(url, body, headers...)
+		if r.Error != nil {
+			errors = append(errors, r.Error)
+		}
+		return r, errors
+	}
+
+	return nil, errors
 }
 
 func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, headers ...string) *Result {
@@ -280,9 +327,7 @@ func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, h
 		//fmt.Println("  000", reflect.TypeOf(data))
 
 		switch t := data.(type) {
-		case *io.ReadCloser:
-			reader = *t
-		case io.ReadCloser:
+		case io.Reader:
 			reader = t
 		case []byte:
 			reader = bytes.NewReader(t)
@@ -312,6 +357,7 @@ func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, h
 			contentType = "application/x-www-form-urlencoded"
 			contentLength = len(bytesData)
 		default:
+			fmt.Println("reader 0")
 			//bytesData, err = json.MarshalIndent(data, "", "  ")
 			//fmt.Println("  111", data)
 			bytesData := u.JsonBytes(data)
@@ -377,6 +423,7 @@ func (cp *ClientPool) getRealIp(request *http.Request) string {
 }
 
 func (rs *Result) Save(filename string) error {
+	u.CheckPath(filename)
 	if dstFile, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600); err == nil {
 		defer dstFile.Close()
 		if rs.data == nil {
