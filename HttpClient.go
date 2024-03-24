@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/textproto"
 	url2 "net/url"
 	"os"
 	"path/filepath"
@@ -271,28 +272,63 @@ func (cp *ClientPool) Download(filename, url string, callback func(start, end in
 	}
 }
 
-func (cp *ClientPool) MPost(url string, formData map[string]string, files map[string]string, headers ...string) (*Result, []error) {
+func (cp *ClientPool) MPost(url string, formData map[string]string, files map[string]interface{}, headers ...string) (*Result, []error) {
 	errors := make([]error, 0)
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	for k, v := range formData {
-		if err := writer.WriteField(k, v); err != nil {
-			errors = append(errors, err)
+	if formData != nil {
+		for k, v := range formData {
+			if err := writer.WriteField(k, v); err != nil {
+				errors = append(errors, err)
+			}
 		}
 	}
 
-	for k, v := range files {
-		if fp, err := os.Open(v); err == nil {
-			if part, err := writer.CreateFormFile(k, filepath.Base(v)); err == nil {
-				if _, err = io.Copy(part, fp); err != nil {
+	if files != nil {
+		for k, v := range files {
+			if filename, ok := v.(string); ok && u.FileExists(filename) {
+				if fp, err := os.Open(filename); err == nil {
+					if part, err := writer.CreateFormFile(k, filepath.Base(filename)); err == nil {
+						if _, err = io.Copy(part, fp); err != nil {
+							errors = append(errors, err)
+						}
+					} else {
+						errors = append(errors, err)
+					}
+					_ = fp.Close()
+				} else {
 					errors = append(errors, err)
 				}
 			} else {
-				errors = append(errors, err)
+				h := make(textproto.MIMEHeader)
+				var buf []byte
+				if reader, ok := v.(io.Reader); ok {
+					buf, _ = io.ReadAll(reader)
+					h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, k, k))
+					h.Set("Content-Type", "application/octet-stream")
+				} else if bytesV, ok := v.([]byte); ok {
+					buf = bytesV
+					h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, k, k))
+					h.Set("Content-Type", "application/octet-stream")
+				} else if strV, ok := v.(string); ok {
+					buf = []byte(strV)
+					h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s.txt"`, k, k))
+					h.Set("Content-Type", "text/plain")
+				} else {
+					buf = u.JsonBytesP(v)
+					h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s.json"`, k, k))
+					h.Set("Content-Type", "application/json")
+				}
+
+				if part, err := writer.CreatePart(h); err == nil {
+					if _, err = part.Write(buf); err != nil {
+						errors = append(errors, err)
+					}
+				} else {
+					errors = append(errors, err)
+				}
+
 			}
-			_ = fp.Close()
-		} else {
-			errors = append(errors, err)
 		}
 	}
 
