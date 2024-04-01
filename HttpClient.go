@@ -393,7 +393,7 @@ func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, h
 			contentType = "application/x-www-form-urlencoded"
 			contentLength = len(bytesData)
 		default:
-			fmt.Println("reader 0")
+			//fmt.Println("reader 0")
 			//bytesData, err = json.MarshalIndent(data, "", "  ")
 			//fmt.Println("  111", data)
 			bytesData := u.JsonBytes(data)
