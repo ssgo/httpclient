@@ -102,6 +102,12 @@ func (cp *ClientPool) Head(url string, headers ...string) *Result {
 	return cp.Do("HEAD", url, nil, headers...)
 }
 func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, data interface{}, settedHeaders ...string) *Result {
+	return cp.doByRequest(false, request, method, url, data, settedHeaders...)
+}
+func (cp *ClientPool) ManualDoByRequest(request *http.Request, method, url string, data interface{}, settedHeaders ...string) *Result {
+	return cp.doByRequest(true, request, method, url, data, settedHeaders...)
+}
+func (cp *ClientPool) doByRequest(manualDo bool, request *http.Request, method, url string, data interface{}, settedHeaders ...string) *Result {
 	headers := map[string]string{}
 	// 注释掉不续传未在standard.DiscoverRelayHeaders中定义的头
 	//for k, v := range request.Header {
@@ -171,7 +177,11 @@ func (cp *ClientPool) DoByRequest(request *http.Request, method, url string, dat
 	for k, v := range headers {
 		headerArgs = append(headerArgs, k, v)
 	}
-	return cp.Do(method, url, data, headerArgs...)
+	if manualDo {
+		return cp.ManualDo(method, url, data, headerArgs...)
+	} else {
+		return cp.Do(method, url, data, headerArgs...)
+	}
 }
 
 func (cp *ClientPool) Do(method, url string, data interface{}, headers ...string) *Result {
