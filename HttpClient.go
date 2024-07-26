@@ -403,14 +403,19 @@ func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, h
 			contentType = "application/x-www-form-urlencoded"
 			contentLength = len(bytesData)
 		default:
-			//fmt.Println("reader 0")
-			//bytesData, err = json.MarshalIndent(data, "", "  ")
-			//fmt.Println("  111", data)
-			bytesData := u.JsonBytes(data)
-			//fmt.Println("  222", string(bytesData))
-			reader = bytes.NewReader(bytesData)
-			contentType = "application/json"
-			contentLength = len(bytesData)
+			if data != nil {
+				//fmt.Println("reader 0")
+				//bytesData, err = json.MarshalIndent(data, "", "  ")
+				//fmt.Println("  111", data)
+				bytesData := u.JsonBytes(data)
+				strData := string(bytesData)
+				if strData != "" && strData != "null" {
+					//fmt.Println("  222", string(bytesData))
+					reader = bytes.NewReader(bytesData)
+					contentType = "application/json"
+					contentLength = len(bytesData)
+				}
+			}
 		}
 		if err == nil {
 			req, err = http.NewRequest(method, url, reader)
