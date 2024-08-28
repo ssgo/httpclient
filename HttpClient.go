@@ -417,14 +417,15 @@ func (cp *ClientPool) do(fetchBody bool, method, url string, data interface{}, h
 				}
 			}
 		}
-		if err == nil {
-			req, err = http.NewRequest(method, url, reader)
+		if req, err = http.NewRequest(method, url, reader); err == nil {
 			if contentType != "" {
 				req.Header.Set("Content-Type", contentType)
 			}
 			if contentLength > 0 {
 				req.Header.Set("Content-Length", u.String(contentLength))
 			}
+		} else {
+			//fmt.Println(u.BRed(">>>>>>>>>>>>>"), err.Error())
 		}
 	}
 	if err != nil {
