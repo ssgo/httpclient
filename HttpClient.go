@@ -86,6 +86,11 @@ func (cp *ClientPool) SetGlobalHeader(k, v string) {
 	}
 }
 
+func (cp *ClientPool) Destroy() {
+	cp.pool.CloseIdleConnections()
+	cp.pool = nil
+}
+
 func (cp *ClientPool) Get(url string, headers ...string) *Result {
 	return cp.Do("GET", url, nil, headers...)
 }
