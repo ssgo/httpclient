@@ -75,9 +75,14 @@ func GetClient(timeout time.Duration) *ClientPool {
 	}, GlobalHeaders: map[string]string{}, DownloadPartSize: 4194304}
 }
 
+func (cp *ClientPool) GetRawClient() *http.Client {
+	return cp.pool
+}
+
 func (cp *ClientPool) EnableRedirect() {
 	cp.pool.CheckRedirect = nil
 }
+
 func (cp *ClientPool) SetGlobalHeader(k, v string) {
 	if v == "" {
 		delete(cp.GlobalHeaders, k)
